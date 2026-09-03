@@ -27,6 +27,7 @@ const ALLOWED_USERS = [
 ];
 
 const dataFile = path.join(__dirname, 'noback.json');
+const replyLocksDir = path.join(__dirname, '.noback-reply-locks');
 const handledMessages = new Set();
 let noBackList = new Set();
 let isNoBackEnabled = true;
@@ -67,6 +68,37 @@ function isAllowed(message) {
   );
 }
 
+async function replyOnce(message, content) {
+  fs.mkdirSync(replyLocksDir, { recursive: true });
+  const lockPath = path.join(replyLocksDir, message.id);
+
+  // mkdir عملية ذرّية؛ تمنع نسختين من البوت من الرد على نفس الرسالة.
+  try {
+    fs.mkdirSync(lockPath);
+  } catch {
+    return;
+  }
+
+  try {
+    const recentMessages = await message.channel.messages.fetch({
+      limit: 50
+    });
+    const alreadyReplied = recentMessages.some(
+      item =>
+        item.author.id === client.user.id &&
+        item.reference?.messageId === message.id
+    );
+
+    if (!alreadyReplied) return await message.reply(content);
+  } catch (error) {
+    console.error('تعذر التحقق من الرد السابق:', error);
+  } finally {
+    setTimeout(() => {
+      fs.rmSync(lockPath, { recursive: true, force: true });
+    }, 120_000);
+  }
+}
+
 client.once('clientReady', () => {
   console.log(`✅ تم تشغيل البوت باسم: ${client.user.tag}`);
 });
@@ -83,14 +115,15 @@ client.on('messageCreate', async (message) => {
 
   if (command === '!noback') {
     if (!isAllowed(message)) {
-      return message.reply(':x: اشحت ابو خالد يعطيك برميشن.');
+      return replyOnce(message, ':x: اشحت ابو خالد يعطيك برميشن.');
     }
 
     const action = args[1]?.toLowerCase();
 
     if (action === 'list') {
       if (noBackList.size === 0) {
-        return message.reply(
+        return replyOnce(
+          message,
           ':clipboard: قائمة النوباك فارغة حالياً.'
         );
       }
@@ -99,7 +132,8 @@ client.on('messageCreate', async (message) => {
         .map(id => `- <@${id}> (${id})`)
         .join('\n');
 
-      return message.reply(
+      return replyOnce(
+        message,
         `📋 **قائمة المحظورين نوباك (${noBackList.size}):**\n${list}`
       );
     }
@@ -108,16 +142,20 @@ client.on('messageCreate', async (message) => {
       const userId = args[2];
 
       if (!/^\d+$/.test(userId || '')) {
-        return message.reply(':warning: يرجى كتابة الـ ID الصحيح.');
+        return replyOnce(
+          message,
+          ':warning: يرجى كتابة الـ ID الصحيح.'
+        );
       }
 
       if (!noBackList.has(userId)) {
-        return message.reply(':warning: غلطان يالاخو.');
+        return replyOnce(message, ':warning: غلطان يالاخو.');
       }
 
       noBackList.delete(userId);
       saveData();
-      return message.reply(
+      return replyOnce(
+        message,
         `✅ تم إزالة <@${userId}> انفك النوباك.`
       );
     }
@@ -125,7 +163,8 @@ client.on('messageCreate', async (message) => {
     const userId = args[1];
 
     if (!/^\d+$/.test(userId || '')) {
-      return message.reply(
+      return replyOnce(
+        message,
         ':warning: يرجى كتابة الـ ID الصحيح للطرف المستهدف.'
       );
     }
@@ -137,10 +176,11 @@ client.on('messageCreate', async (message) => {
       await message.guild.members.ban(userId, {
         reason: 'نظام حماية النوباك (No-Back)'
       });
-      return message.reply(`✅ <@${userId}> تم شقه بنجاح.`);
+      return replyOnce(message, `✅ <@${userId}> تم شقه بنجاح.`);
     } catch (error) {
       console.error(error);
-      return message.reply(
+      return replyOnce(
+        message,
         `✅ تم إضافة <@${userId}> للقائمة، لكن تعذر تبنيده فوراً (تأكد من وجود البوت فوق رتبته أو تمتعه بصلاحية Ban Members).`
       );
     }
@@ -148,7 +188,7 @@ client.on('messageCreate', async (message) => {
 
   if (command === '!noback_protection') {
     if (!isAllowed(message)) {
-      return message.reply(':x: اشحت ابو خالد يعطيك برميشن.');
+      return replyOnce(message, ':x: اشحت ابو خالد يعطيك برميشن.');
     }
 
     const status = args[1]?.toLowerCase();
@@ -156,7 +196,8 @@ client.on('messageCreate', async (message) => {
     if (status === 'on') {
       isNoBackEnabled = true;
       saveData();
-      return message.reply(
+      return replyOnce(
+        message,
         ':green_circle: تم تفعيل نظام النوباك.'
       );
     }
@@ -164,12 +205,14 @@ client.on('messageCreate', async (message) => {
     if (status === 'off') {
       isNoBackEnabled = false;
       saveData();
-      return message.reply(
+      return replyOnce(
+        message,
         ':red_circle: تم إيقاف نظام النوباك.'
       );
     }
 
-    return message.reply(
+    return replyOnce(
+      message,
       `⚠️ الحالة الحالية للنظام: **${
         isNoBackEnabled ? 'مفعل 🟢' : 'معطل 🔴'
       }**\nاستخدم \`!noback_protection on\` أو \`off\`.`
