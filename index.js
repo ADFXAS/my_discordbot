@@ -19,7 +19,9 @@ const client = new Client({
 });
 // قائمة المعرفات المسموح لها باستخدام أوامر النوباك
 const ALLOWED_USERS = [
-  'حط ال id هنا'
+  '1518574556787249177' 
+ ' 1496923040985124905' 
+' 1422526730035396659' 
 ];
 // ملف حفظ قائمة النوباك
 const noBackFile = path.join(__dirname, 'noback.json');
